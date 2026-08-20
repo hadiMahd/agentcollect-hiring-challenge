@@ -185,3 +185,56 @@ For every important question or architectural decision, use this format:
 Do not jump immediately to a complex architecture.
 
 Be skeptical, challenge my assumptions, and optimize for a solution that is **generalizable, explainable, scalable, efficient, privacy-conscious, and actually feasible to ship.**
+
+---
+
+## How I approached the problem
+
+I treated this as an uncertainty-reduction exercise rather than jumping directly to an architecture.
+
+1. **Separate symptoms from bugs.** Repeated clicks, refreshes, abandonment, and long waits can indicate frustration, but each also has legitimate explanations.
+2. **Define observable contracts.** The useful question is whether a valid action received an appropriate frontend and backend outcome—not whether the user merely looked frustrated.
+3. **Combine independent evidence.** Confidence should increase when a missing outcome, retry behavior, errors, recurrence, and business impact agree.
+4. **Segment unlike behavior.** Debtors completing a payment and trained agents using a dashboard should not share one behavioral baseline.
+5. **Prefer existing capabilities.** PostHog should handle replay storage, querying, aggregation, and managed analysis where its capabilities and privacy terms fit.
+6. **Keep humans responsible for conclusions.** The system ranks investigation candidates; product and engineering reviewers confirm whether an incident is a bug.
+
+## Why the final plan is managed-first
+
+The simplest maintainable solution is not a new replay-processing platform. A custom exporter, event processor, feature store, anomaly model, and alerting service would add operational work before proving that PostHog cannot meet the need.
+
+The final plan therefore starts with:
+
+- A telemetry and privacy audit.
+- Existing PostHog events and replay signals.
+- Minimal action/outcome instrumentation only where ground truth is missing.
+- Structured metadata for broad detection and restricted replay access for confirmation.
+- A shadow-mode pilot before team notifications.
+- Explicit exit criteria before considering custom infrastructure.
+
+This is a deliberate build-versus-buy decision, not a rejection of custom detection. If the managed approach shows a measurable gap in precision, recall, privacy, latency, cost, or query capability, that evidence defines what a custom component must solve.
+
+## How I would validate the direction
+
+The pilot should include healthy sessions, historical incidents, injected failures, and intentionally ambiguous behavior. Useful measures include:
+
+- Precision among the highest-ranked findings.
+- Recall on known and injected failures.
+- Time from first occurrence to detection.
+- Duplicate incident rate and alerts per session volume.
+- False-positive reasons for each product surface.
+- Reviewer effort and whether findings are actionable.
+- Performance on routes and releases not used during calibration.
+
+Thresholds and alert frequency should come from the observed data and the team's review capacity, not arbitrary numbers chosen during planning.
+
+## What this submission demonstrates
+
+- Product reasoning grounded in user outcomes rather than isolated analytics signals.
+- Skepticism about false positives, historical baselines, and inferred intent.
+- Production pragmatism through managed services and explicit build criteria.
+- Privacy-first handling of payment, dispute, and debtor replay data.
+- Explainable incident evidence and human review instead of opaque automation.
+- A path from unknowns to a small pilot, measurable validation, and controlled scaling.
+
+See [PLAN3.md](./PLAN3.md) for the complete decision gates, implementation sequence, privacy controls, and validation plan.
