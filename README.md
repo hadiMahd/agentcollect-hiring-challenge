@@ -1,175 +1,66 @@
-# agentcollect-hiring-challenge
+# AgentCollect UX Bug Detection Plan
 
-## 🧠 PROMPT JOURNEY
+This repository contains my system-design response for detecting broken or frustrating UX from AgentCollect's PostHog session replays before users report it.
 
-* **Raw idea** – the messy thoughts straight from my brain cells
-* **Polished** – ChatGPT refined the prompt
-* **Current** – Now working with Codex to implement
+The product surfaces include debtor payment and dispute flows plus the internal client dashboard. The difficult cases are often not crashes: an action may appear to do nothing, respond too slowly, produce unclear feedback, or cause repeated retries and abandonment.
 
----
+## Final proposal
 
-## 🔍 MY RAW PROMPT
+The complete proposal is in [PLAN3.md](./PLAN3.md).
 
-> hi codex, i have a debt payment platform where users pay their debt, there are buttons and forms to submit in the ui, and my main goal is to try to catch ux bugs by analyzing posthog replays before users report them.
+It combines two priorities:
 
-what im thinking about is multiple clicks without results, multiple refreshes, going back and forth, abandoning after trying to do something, errors if they are available, and also any patterns that tell me there is a problem in the ux or that the user is frustrated before he even finishes using the app.
+- Detect unfamiliar UX failures through behavioral evidence and expected outcomes.
+- Keep the first production version simple by using managed PostHog capabilities before building custom replay infrastructure.
 
-but i also dont want to assume something like multiple clicks automatically means there is a bug. it could be a slow network, validation, an intentionally disabled button, permissions, or just normal user behavior.
+## Core reasoning
 
-the mental model im thinking about is basically: **"is the user's want/need satisfied?"** and **"did his action/request get the appropriate response?"**
+The detector should not equate frustration with a confirmed bug.
 
-so i think one important part is figuring out what the expected behavior actually is after an action. for example if someone clicks submit, what is supposed to happen after that, and how can we reliably know it happened? im thinking the ground truth could come from successful sessions, backend success events, product requirements, tests, or the application logic, but i dont know yet what data is actually available.
+> **User action → expected response → observed response**
 
-some things i know i need to understand before making decisions are what posthog captures reliably, whether elements have stable identifiers, what represents a successful payment/dispute/action, whether sessions can be connected to backend outcomes, what normal user behavior looks like, and whether debtor flows and the internal dashboard should be treated differently.
+A finding becomes more credible when several signals agree:
 
-i also want the solution to generalize to ux bugs we dont already know about instead of hardcoding known buttons/pages or rules like "5 clicks = bug".
+> **Missing outcome + frustration + recurrence + business impact − valid explanations**
 
-i want something scalable, efficient, feasible to actually run in production, and not something that needs an expensive llm or vision model analyzing every replay if structured events can solve most of the problem.
+For example, repeated clicks alone are weak evidence. Repeated clicks following a valid submission, with no expected outcome, an adjacent error, and the same pattern across several sessions are much more useful.
 
-privacy is also important because payment/dispute replays can contain pii, so i would prefer to work with masked or extracted behavioral data and avoid sending raw replays to third-party models unless there is a very good reason.
+## Proposed direction
 
-i want you to help me brainstorm this before we choose an architecture or write code.
+- Audit the current PostHog data and privacy controls before choosing thresholds.
+- Establish expected behavior from backend outcomes, frontend acknowledgement, product requirements, tests, and reviewed healthy sessions.
+- Reuse existing events and add minimal generic action/outcome instrumentation only where needed.
+- Use PostHog as the system of record for detection, aggregation, replay evidence, and notifications.
+- Separate payment, dispute, and client-dashboard behavior rather than forcing one baseline across different users and workflows.
+- Group related sessions into incidents and require human confirmation.
+- Keep visual replay AI disabled unless a privacy-reviewed experiment proves that structured metadata misses valuable failures.
+- Build custom processing only after a managed pilot demonstrates a measurable limitation.
 
-tell me:
+## What the plan addresses
 
-* what important things i still dont know and should figure out first
-* where you would get the expected-behavior ground truth from
-* which signals you would start from and which ones you would not trust alone
-* where false positives could happen
-* what assumptions could slap us later in production if we get them wrong
-* what questions i should ask the product/engineering team and why each question matters
-* how you would think about scalability, efficiency and feasibility
-* the important tradeoffs between a simple rule-based approach, learned behavioral baselines, and heavier ai/llm/replay analysis
-* how you would avoid alert fatigue
-* and what privacy/security concerns i should think about
+- Unknown data and ground-truth requirements.
+- Strong, weak, and combined behavioral signals.
+- False positives and missed-bug scenarios.
+- Expected-behavior sources and their limitations.
+- Alert deduplication and reviewer feedback.
+- Privacy controls for debtor and payment data.
+- Validation using known incidents, injected failures, and ambiguous healthy behavior.
+- Scaling and exit criteria for custom infrastructure.
 
-have a lot of scrutiny when making decisions. dont jump straight into a fancy architecture. challenge my assumptions and tell me where my thinking could be wrong.
+## Key unresolved decisions
 
-for important decisions or questions, tell me **why it matters, what you would assume by default if we dont know the answer yet, and what would change depending on the answer.**
+The plan deliberately does not invent answers that require AgentCollect context:
 
----
+- Whether managed AI processing is approved for replay data.
+- Which product flow provides the best first pilot.
+- Whether frontend sessions can be joined safely to backend outcomes.
+- How many findings the team can realistically review.
 
-## 📝 CHATGPT ADJUSTED PROMPT
+These are decision gates in the plan, not details hidden behind premature architecture.
 
-> # Refined Prompt
+## Repository contents
 
-You are helping me plan a production-grade system for detecting UX bugs from PostHog session replays on a debt-payment platform.
+- [PLAN3.md](./PLAN3.md) — final merged plan and recommended starting approach.
+- [README.md](./README.md) — recruiter-facing summary and navigation.
 
-The main product surfaces are:
-
-* debtor payment flows,
-* debtor dispute flows,
-* and an internal client dashboard with forms, buttons, reports, and case-management actions.
-
-My goal is to detect broken or frustrating UX **before users report it**, especially issues that do not necessarily produce a crash or exception.
-
-My current mental model is:
-
-**user action → expected outcome → observed outcome**
-
-In other words:
-
-* did the user get what they were trying to achieve?
-* did the product respond appropriately to their action?
-* if not, is there enough evidence to consider the interaction suspicious?
-
-The initial behavioral signals I am thinking about are:
-
-* repeated clicks on the same element,
-* clicks with no visible result,
-* repeated refreshes,
-* back-and-forth navigation,
-* abandonment after an important action,
-* long waits followed by retries,
-* rage clicks or dead clicks if available,
-* errors or exceptions when available,
-* and repeated similar patterns across different sessions.
-
-I do **not** want to assume that one signal automatically means a bug.
-
-For example, repeated clicks could also be caused by:
-
-* slow network responses,
-* validation errors,
-* intentionally disabled controls,
-* permission restrictions,
-* user confusion,
-* or normal impatient behavior.
-
-One of the biggest things I need to figure out is the **expected-behavior ground truth**.
-
-For example, if a user clicks “Submit dispute”, I need to know what should happen next and how to verify that it actually happened.
-
-Possible sources of ground truth might include:
-
-* backend success events,
-* successful historical sessions,
-* product requirements,
-* automated tests,
-* application logic,
-* frontend state changes,
-* or input from the product/engineering team.
-
-I do not yet know which of these are available or reliable.
-
-Other unknowns I already know I need to clarify include:
-
-* exactly what PostHog events and properties are captured reliably,
-* whether DOM elements have stable identifiers,
-* whether PostHog sessions can be safely connected to backend business outcomes,
-* what normal behavior looks like for each product surface,
-* which actions are intentionally blocked by validation or permissions,
-* whether debtor and client-dashboard behavior require separate baselines,
-* and how much alert volume the team can realistically review.
-
-I want the solution to:
-
-* generalize to UX bugs we have never seen before,
-* avoid hardcoding known buttons, pages, or incidents,
-* be scalable and computationally efficient,
-* be feasible to operate in production,
-* minimize false positives and alert fatigue,
-* remain explainable to engineers and product teams,
-* and handle privacy carefully because payment/dispute sessions may contain PII.
-
-I would prefer not to use an expensive LLM or vision model on every replay if most detection can be done from structured event metadata. Heavier analysis should only be used if it clearly improves detection enough to justify the cost and privacy tradeoff.
-
-Before proposing architecture or implementation, **challenge my reasoning first**.
-
-I want you to do the following:
-
-1. Identify the most important things I still do not know.
-2. Explain which unknowns must be resolved before implementation and which ones can safely remain assumptions for an MVP.
-3. Identify the best sources of expected-behavior ground truth and explain the strengths and weaknesses of each.
-4. Evaluate the behavioral signals I listed:
-
-   * which are strong,
-   * which are weak,
-   * which should only be trusted when combined with other signals.
-5. Give realistic false-positive examples.
-6. Identify cases where a real UX bug could be missed by my current thinking.
-7. Propose high-value questions I should ask the product/engineering team.
-8. Compare the tradeoffs between:
-
-   * rule-based detection,
-   * learned behavioral baselines,
-   * anomaly detection,
-   * LLM-based reasoning,
-   * and visual replay analysis.
-9. Recommend the smallest feasible first version that could realistically run in production.
-10. Explain how that approach would scale as session volume grows.
-11. Explain how to prevent alert fatigue and duplicate alerts.
-12. Identify privacy/security risks and how to minimize exposure of PII.
-13. Red-team the design and identify assumptions that could create serious problems later in production.
-
-For every important question or architectural decision, use this format:
-
-**Question / decision**
-**Why it matters:**
-**Default assumption if unanswered:**
-**What changes depending on the answer:**
-**Tradeoff:**
-
-Do not jump immediately to a complex architecture.
-
-Be skeptical, challenge my assumptions, and optimize for a solution that is **generalizable, explainable, scalable, efficient, privacy-conscious, and actually feasible to ship.**
+This is intentionally a planning deliverable; it focuses on how to reduce uncertainty and choose the smallest maintainable production approach before implementation.
